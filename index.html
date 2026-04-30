@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Presentation Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0c0c0e;
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: pan-y;
+  }
+
+  /* Grain overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 128px 128px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #viewer {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+  }
+
+  /* ── Cover page ── */
+  .cover {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 32px;
+  }
+
+  .cover-logo {
+    max-width: 55%;
+    max-height: 45%;
+    object-fit: contain;
+    filter: drop-shadow(0 4px 24px rgba(0,0,0,0.4));
+  }
+
+  .cover-hint {
+    font-family: 'Instrument Serif', serif;
+    font-size: 16px;
+    color: rgba(255,255,255,0.25);
+    font-style: italic;
+    letter-spacing: 0.5px;
+  }
+
+  .placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .placeholder-title {
+    font-size: 20px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 0.5px;
+  }
+
+  .placeholder-hint {
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  /* ── Slide page ── */
+  .slide {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide-logo {
+    position: absolute;
+    top: 20px;
+    left: 24px;
+    height: 32px;
+    width: auto;
+    object-fit: contain;
+    opacity: 0.75;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.5));
+    z-index: 5;
+  }
+
+  .page-counter {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 2px;
+    z-index: 5;
+  }
+
+  .slide-image-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 64px 40px 48px;
+  }
+
+  .slide-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+
+  .slide-empty {
+    font-size: 14px;
+    color: rgba(255,255,255,0.4);
+  }
+
+  /* ── Nav zones ── */
+  .nav-zone {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 35%;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .nav-zone.visible { opacity: 1; }
+
+  .nav-left {
+    left: 0;
+    justify-content: flex-start;
+    padding-left: 20px;
+    background: linear-gradient(to right, rgba(0,0,0,0.2), transparent);
+  }
+
+  .nav-right {
+    right: 0;
+    justify-content: flex-end;
+    padding-right: 20px;
+    background: linear-gradient(to left, rgba(0,0,0,0.2), transparent);
+  }
+
+  .nav-arrow {
+    font-size: 52px;
+    color: rgba(255,255,255,0.45);
+    font-weight: 300;
+    line-height: 1;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+
+  /* ── Bottom bar ── */
+  .bottom-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 16px 24px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.4));
+    z-index: 10;
+  }
+
+  .dots {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    transition: all 0.25s ease;
+  }
+
+  .dot.active {
+    background: rgba(255,255,255,0.7);
+    width: 18px;
+    border-radius: 3px;
+  }
+
+  .delete-btn {
+    position: absolute;
+    right: 24px;
+    background: none;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.35);
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    font-family: inherit;
+  }
+
+  .delete-btn:hover {
+    border-color: rgba(255,255,255,0.3);
+    color: rgba(255,255,255,0.6);
+  }
+
+  /* ── Content transition ── */
+  #content {
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  #content.forward {
+    opacity: 0.6;
+    transform: translateX(-8px);
+  }
+
+  #content.back {
+    opacity: 0.6;
+    transform: translateX(8px);
+  }
+
+  /* ── Cursor zones ── */
+  #viewer.cursor-left { cursor: w-resize; }
+  #viewer.cursor-right { cursor: e-resize; }
+</style>
+</head>
+<body>
+
+<div id="viewer">
+  <div id="content"></div>
+  <div class="nav-zone nav-left" id="navLeft"><span class="nav-arrow">‹</span></div>
+  <div class="nav-zone nav-right" id="navRight"><span class="nav-arrow">›</span></div>
+  <div class="bottom-bar">
+    <div class="dots" id="dots"></div>
+    <button class="delete-btn" id="deleteBtn" title="Remove slide" style="display:none">✕</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  let logo = null;
+  let slides = [];
+  let current = 0;
+  let touchStartX = null;
+
+  const viewer = document.getElementById('viewer');
+  const content = document.getElementById('content');
+  const navLeft = document.getElementById('navLeft');
+  const navRight = document.getElementById('navRight');
+  const dots = document.getElementById('dots');
+  const deleteBtn = document.getElementById('deleteBtn');
+
+  function totalPages() { return 1 + slides.length; }
+
+  function render() {
+    if (current === 0) {
+      renderCover();
+    } else {
+      renderSlide(current - 1);
+    }
+    renderDots();
+    deleteBtn.style.display = current > 0 ? '' : 'none';
+  }
+
+  function renderCover() {
+    if (logo) {
+      content.innerHTML = `
+        <div class="cover">
+          <img class="cover-logo" src="${logo}" alt="Logo" draggable="false">
+          <div class="cover-hint">Paste screenshots to add slides →</div>
+        </div>`;
+    } else {
+      content.innerHTML = `
+        <div class="cover">
+          <div class="placeholder">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <rect x="4" y="4" width="40" height="40" rx="8" stroke="rgba(255,255,255,0.25)" stroke-width="2" stroke-dasharray="4 4"/>
+              <path d="M24 16v16M16 24h16" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <div class="placeholder-title">Paste your logo</div>
+            <div class="placeholder-hint">Copy an image to your clipboard and press ⌘V / Ctrl+V</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  function renderSlide(idx) {
+    const img = slides[idx];
+    const num = String(idx + 1).padStart(2, '0');
+    const total = String(slides.length).padStart(2, '0');
+    const logoHtml = logo ? `<img class="slide-logo" src="${logo}" alt="Logo" draggable="false">` : '';
+    const imageHtml = img
+      ? `<img class="slide-image" src="${img}" alt="Slide ${idx + 1}" draggable="false">`
+      : `<div class="slide-empty">Paste a screenshot to fill this slide</div>`;
+
+    content.innerHTML = `
+      <div class="slide">
+        ${logoHtml}
+        <div class="page-counter">${num} / ${total}</div>
+        <div class="slide-image-wrap">${imageHtml}</div>
+      </div>`;
+  }
+
+  function renderDots() {
+    const total = totalPages();
+    let html = '';
+    for (let i = 0; i < total; i++) {
+      html += `<div class="dot${i === current ? ' active' : ''}"></div>`;
+    }
+    dots.innerHTML = html;
+  }
+
+  function go(dir) {
+    const next = current + dir;
+    if (next < 0 || next >= totalPages()) return;
+    content.classList.add(dir > 0 ? 'forward' : 'back');
+    setTimeout(() => {
+      current = next;
+      render();
+      content.classList.remove('forward', 'back');
+    }, 180);
+  }
+
+  // Paste handler
+  window.addEventListener('paste', function(e) {
+    const items = Array.from(e.clipboardData?.items || []);
+    items.forEach(function(item) {
+      if (!item.type.startsWith('image/')) return;
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = function() {
+        if (current === 0 && !logo) {
+          logo = reader.result;
+          render();
+        } else {
+          const insertIdx = current === 0 ? slides.length : current;
+          slides.splice(insertIdx, 0, reader.result);
+          current = insertIdx + (current === 0 ? 0 : 0);
+          if (current === 0) {
+            current = slides.length;
+          } else {
+            current = insertIdx + 1;
+          }
+          render();
+        }
+      };
+      reader.readAsDataURL(blob);
+    });
+  });
+
+  // Click navigation
+  viewer.addEventListener('click', function(e) {
+    if (e.target.closest('.delete-btn')) return;
+    const rect = viewer.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    if (x < 0.35) go(-1);
+    else if (x > 0.65) go(1);
+  });
+
+  // Hover cursor + arrow indicators
+  viewer.addEventListener('mousemove', function(e) {
+    if (e.target.closest('.delete-btn')) {
+      viewer.classList.remove('cursor-left', 'cursor-right');
+      navLeft.classList.remove('visible');
+      navRight.classList.remove('visible');
+      return;
+    }
+    const rect = viewer.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const canLeft = current > 0;
+    const canRight = current < totalPages() - 1;
+
+    viewer.classList.remove('cursor-left', 'cursor-right');
+    navLeft.classList.remove('visible');
+    navRight.classList.remove('visible');
+
+    if (x < 0.35 && canLeft) {
+      viewer.classList.add('cursor-left');
+      navLeft.classList.add('visible');
+    } else if (x > 0.65 && canRight) {
+      viewer.classList.add('cursor-right');
+      navRight.classList.add('visible');
+    }
+  });
+
+  viewer.addEventListener('mouseleave', function() {
+    viewer.classList.remove('cursor-left', 'cursor-right');
+    navLeft.classList.remove('visible');
+    navRight.classList.remove('visible');
+  });
+
+  // Touch swipe
+  viewer.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+  }, { passive: true });
+
+  viewer.addEventListener('touchend', function(e) {
+    if (touchStartX === null) return;
+    const diff = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(diff) > 50) go(diff < 0 ? 1 : -1);
+    touchStartX = null;
+  });
+
+  // Keyboard
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault();
+      go(1);
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      go(-1);
+    }
+  });
+
+  // Delete slide
+  deleteBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    if (current === 0) return;
+    slides.splice(current - 1, 1);
+    current = Math.max(0, current - 1);
+    render();
+  });
+
+  // Initial render
+  render();
+})();
+</script>
+</body>
+</html>
